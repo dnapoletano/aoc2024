@@ -2,6 +2,9 @@
 .text
 .p2align 2
 
+;;; utility functions
+
+;;; wrapper around printf with a preset message string
 print:
   sub sp, sp, #64
 	str	x30, [sp, #16]
@@ -18,7 +21,7 @@ print:
   add sp, sp, #64
   ret
 
-
+;;; compute the integer power of an integer number
 power:
   sub sp, sp, #64
   str	x30, [sp, #16]
@@ -50,7 +53,7 @@ exit_power_function:
   add sp, sp, #64
   ret
 
-/// return number (x0) * 10^(x1 - x2)
+/// returns number (x0) * 10^(x1 - x2)
 base_ten_number:
   sub sp, sp, #1024
 	str	x30, [sp, #16]
@@ -78,7 +81,8 @@ base_ten_number:
   ret
 
 
-
+;;; find the position of the character ' ' in a string
+;;; which is used to split the string
 separator_position:
   sub sp, sp, #1024
 	str	x30, [sp, #16]
@@ -108,7 +112,7 @@ separator_return:
 
 /// x0 null terminated string
 /// reads a string of numbers right to left
-/// and converts it into an integer value
+/// and converts it into an unsigned integer value
 convert_string_to_int:
   sub sp, sp, #1024
 	str	x30, [sp, #16]
@@ -161,7 +165,7 @@ convert_loop:
   cmp x0, #'\0'
   b.eq dec_loop
   /// flag signals that the beginning of the string is not the null terminator
-  /// but the space
+  /// but the space, this is used to read multiple numbers from a given line
   ldr x1, [sp, flag]
   cmp x1, #0
   b.eq flag_false
@@ -301,7 +305,7 @@ exit_convert_string_to_int:
   add sp, sp, #1024
   ret
 
-
+;;; reads a line and returns the two numbers
 split_line:
   sub sp, sp, #1024
 	str	x30, [sp, #16]
@@ -335,12 +339,6 @@ save_ordered_vector:
   str x0, [sp, #24]
   str x1, [sp, #32]
   str x2, [sp, #40]
-
-  ;; mov x0, x1
-  ;; bl print
-  ;; ldr x2, [sp, #40]
-  ;; mov x0, x2
-  ;; bl print
 
   ldr x0, [sp, #24]
   ldr x1, [sp, #32]
@@ -511,12 +509,13 @@ loop:
   bl _fgets
   /// check that read was possible
   cmp x0, 0x00
-  b.eq play_with_vector ///exitloop
+  b.eq play_with_vector ///exitloop and move on
 
 /// read line and convert
   ldr x0, [sp, linebufferptr]
   bl split_line
-testlabel:
+
+  /// store the result to temporary registers
   mov x22, x0
   mov x23, x1
 
