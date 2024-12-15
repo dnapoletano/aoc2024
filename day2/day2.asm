@@ -566,6 +566,7 @@ ists_diff_ispos:
   b.gt ists_unsafe
 
   sub x6, x4, #3
+  cmp x6, #0
   b.gt ists_unsafe
 
   mov x0, #1
@@ -578,6 +579,7 @@ ists_diff_isneg:
   b.lt ists_unsafe
 
   add x6, x4, #3
+  cmp x6, #0
   b.lt ists_unsafe
 
   mov x0, #1
@@ -703,113 +705,35 @@ _store_last_number:
 
 _end_loop:
 
-  .set previous_number, 96
-  mov x0, #0
-  str x0, [sp, previous_number]
 
-  .set previous_status, 104
   mov x0, #1
-  str x0, [sp, previous_status]
-  .set current_status, 112
-  mov x0, #0
-  str x0, [sp, current_status]
-
-  mov x0, #0
   str x0, [sp, sl_index_i]
 evaluate_loop:
-  ldr x1, [sp, sl_index_i]
-  ldr x0, [sp, vector_of_numbers]
-  add x0, x0, x1
+  ldr x3, [sp, sl_index_i]
+  ldr x4, [sp, vector_of_numbers]
+  add x5, x4, x3
+
+  sub x0, x5, #1
   ldr x0, [x0]
-  and x0, x0, 0xff
-  str x0, [sp, current_number]
+  and x0, x0, 0xff              ; previous
 
-  /// x0 is the current number
-  ldr x1, [sp, sl_index_i]
-  cmp x1, #0
-  b.ne _other_comparisons
+  ldr x1, [x5]
+  and x1, x1, 0xff              ; current
 
-  ldr x0, [sp, current_number]
-  str x0, [sp, previous_number]
-  add x1, x1, #1
-  str x1, [sp, sl_index_i]
-  b evaluate_loop
+  add x2, x5, #1
+  ldr x2, [x2]
+  and x2, x2, 0xff              ; next
 
-_other_comparisons:
-  ldr x0, [sp, current_number]
-  ldr x1, [sp, previous_number]
-  sub x2, x0, x1                ; temp
-  str x2, [sp, current_status]
-  cmp x2, #0
-  b.gt _diff_is_positive
-  cmp x2, #0
-  b.lt _diff_is_negative
-  b _diff_is_null
+  bl is_triplet_safe
 
-_diff_is_negative:
-  ;; test_print
-  ldrsw x2, [sp, current_status]
-  add x3, x2, #3
-  cmp x3, #0
-  b.lt _unsafe
-  b _maybe_safe
-
-_diff_is_positive:
-  ldrsw x2, [sp, current_status]
-  sub x3, x2, #3
-  cmp x3, #0
-  b.gt _unsafe
-  b _maybe_safe
-
-_diff_is_null:
-  b _unsafe
-
-_maybe_safe:
-  ldr x1, [sp, sl_index_i]
-  cmp x1, #1
-  b.le _post_comparison
-  ldrsw x0, [sp, previous_status]
-  ldrsw x2, [sp, current_status]
-  mul x0, x0, x2
-  cmp x0, #0
-  b.gt _safe
-  b _unsafe
-
-_unsafe:
-  ;; if it's unsafe, try skipping this number and try the comparison
-  ;; with the next in line
-  ldr x1, [sp, sl_index_i]
-  ldr x0, [sp, vector_of_numbers]
-  add x0, x0, x1
-  ldr x0, [x0]
-  and x0, x0, 0xff /// x0 contains the next number
-  ldr x1, [sp, previous_number]
-
-
-
-
-
-_really_unsafe:
-  mov x0, #0
-  str x0, [sp, sl_result]
-  b exit_evaluate_for_step_2
-
-_safe:
-  mov x0, #1
-  str x0, [sp, sl_result]
-  b _post_comparison
-
-_post_comparison:
-  ldr x0, [sp, current_status]
-  str x0, [sp, previous_status]
-  ldr x0, [sp, current_number]
-  str x0, [sp, previous_number]
+increment_loop:
   ldr x1, [sp, sl_index_i]
   add x1, x1, #1
   str x1, [sp, sl_index_i]
   ldr x2, [sp, number_of_numbers]
+  sub x2, x2, #2                ; max index - 1
   cmp x1, x2
-  b.lt evaluate_loop
+  b.le evaluate_loop
 
 exit_evaluate_for_step_2:
   ldr x0, [sp, sl_result]
@@ -867,7 +791,6 @@ loop:
   test_printstr
   ldr x0, [sp, linebufferptr]
   bl evaluate_for_step_2
-  test_print
 
   b loop
 
