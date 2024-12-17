@@ -596,6 +596,111 @@ ists_return:
   add sp, sp, #1024
   ret
 
+;;; x0 : vector base address, x1 : vector size, x2 > 0: index to be dumpened
+is_vector_safe:
+  sub sp, sp, #1024
+	str	x30, [sp, #16]
+  str x0, [sp, #24]             ; vector address
+  str x1, [sp, #32]             ; vector size
+  str x2, [sp, #40]             ; index to be dumpened
+
+  cmp x2, x1
+  b.ge isvs_prepare_loop
+  b isvs_reduce_vector_size
+
+isvs_reduce_vector_size:
+  ldr x1, [sp, #32]
+  sub x1, x1, #1
+  str x1, [sp, #32]             ; the effective vector has one less number
+
+isvs_prepare_loop:
+  mov x0, #1
+  str x0, [sp, #48]             ; result
+
+  mov x0, #1
+  str x0, [sp, #56]             ; loop-index-i
+
+isvs_loop:
+  ldr x3, [sp, #56]             ; loads index and vetoed index
+  ldr x0, [sp, #40]
+
+  sub x4, x3, #1                ; x4 previous index, x5 subsequent
+  add x5, x3, #1
+
+  cmp x3, x0
+  b.eq isvs_i_is_skipped
+  cmp x4, x0
+  b.eq isvs_j_is_skipped
+  cmp x5, x0
+  b.eq isvs_k_is_skipped
+  b isvs_check_triplet
+
+isvs_i_is_skipped:
+  mov x3, x5
+  add x5, x5, #1                ; make x3, the next after x5 and reorder all so
+  ;; x3 -> x5, x5 -> x5 + 1
+  ldr x1, [sp, #32]
+  cmp x5, x1                    ; if it's the last number we are skipping, then this check has been done
+  b.gt isvs_return
+
+  b isvs_check_triplet
+
+isvs_j_is_skipped:
+  mov x4, x3
+  mov x3, x5
+  add x5, x5, #1
+  ldr x1, [sp, #32]
+  cmp x5, x1
+  b.gt isvs_return
+
+  b isvs_check_triplet
+
+isvs_k_is_skipped:
+  add x5, x5, #1
+  ldr x1, [sp, #32]
+  cmp x5, x1
+  b.gt isvs_return
+
+  b isvs_check_triplet
+
+isvs_check_triplet:
+  ldr x6, [sp, #24]
+
+  add x0, x6, x4
+  ldr x0, [x0]
+  and x0, x0, 0xff
+
+  add x1, x6, x3
+  ldr x1, [x1]
+  and x1, x1, 0xff
+
+  add x2, x6, x5
+  ldr x2, [x2]
+  and x2, x2, 0xff
+
+  bl is_triplet_safe
+  ldr x1, [sp, #48]
+  mul x0, x0, x1
+  str x0, [sp, #48]
+  cmp x0, #0
+  b.eq isvs_return
+
+isvs_loop_increment:
+  ldr x1, [sp, #56]             ; loop index
+  add x1, x1, #1
+  str x1, [sp, #56]
+
+  ldr x2, [sp, #32]
+  sub x2, x2, #1
+
+  cmp x1, x2
+  b.le isvs_loop
+
+isvs_return:
+  ldr x0, [sp, #48]
+  ldr	x30, [sp, #16]
+  add sp, sp, #1024
+  ret
 
 ;;; I'm lazy and a bit stupid, I should modify the logic of the previous
 ;;; function instead of basically copy pasting it...
@@ -706,34 +811,34 @@ _store_last_number:
 _end_loop:
 
 
-  mov x0, #1
-  str x0, [sp, sl_index_i]
-evaluate_loop:
-  ldr x3, [sp, sl_index_i]
-  ldr x4, [sp, vector_of_numbers]
-  add x5, x4, x3
+  mov x0, #0
+  str x0, [sp, #128]            ; excluded index
 
-  sub x0, x5, #1
-  ldr x0, [x0]
-  and x0, x0, 0xff              ; previous
+  ldr x0, [sp, vector_of_numbers]
+  ldr x1, [sp, number_of_numbers]
+  mov x2, 0xff
+  bl is_vector_safe
 
-  ldr x1, [x5]
-  and x1, x1, 0xff              ; current
+  cmp x0, #1
+  b.eq vector_is_safe
 
-  add x2, x5, #1
-  ldr x2, [x2]
-  and x2, x2, 0xff              ; next
+check_if_vector_is_safe_loop:
+  ldr x0, [sp, vector_of_numbers]
+  ldr x1, [sp, number_of_numbers]
+  ldr x2, [sp, #128]
+  bl is_vector_safe
+  cmp x0, #1
+  b.eq vector_is_safe
+  ldr x2, [sp, #128]
+  add x2, x2, #1
+  str x2, [sp, #128]
+  ldr x1, [sp, number_of_numbers]
 
-  bl is_triplet_safe
+  cmp x2, x1
+  b.lt check_if_vector_is_safe_loop
 
-increment_loop:
-  ldr x1, [sp, sl_index_i]
-  add x1, x1, #1
-  str x1, [sp, sl_index_i]
-  ldr x2, [sp, number_of_numbers]
-  sub x2, x2, #2                ; max index - 1
-  cmp x1, x2
-  b.le evaluate_loop
+vector_is_safe:
+  str x0, [sp, sl_result]
 
 exit_evaluate_for_step_2:
   ldr x0, [sp, sl_result]
@@ -787,17 +892,23 @@ loop:
   ;; add x0, x0, x1
   ;; str x0, [sp, result1]
 
+
   ldr x0, [sp, linebufferptr]
   test_printstr
-  ldr x0, [sp, linebufferptr]
+
   bl evaluate_for_step_2
+  test_print
+
+  ldr x1, [sp, result1]
+  add x0, x0, x1
+  str x0, [sp, result1]
 
   b loop
 
 
 exitloop:
-  ;; ldr x0, [sp, result1]
-  ;; bl print
+  ldr x0, [sp, result1]
+  bl print
   ;; ldr x0, [sp, result2]
   ;; bl print
 exit:
